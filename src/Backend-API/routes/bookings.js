@@ -4,6 +4,7 @@ const {verifyToken,generateToken} = require('../middleware/auth');
 const Booking = require('../models/Booking');
 const { checkAvailability } = require('../utils/bookingHelpers');
 const redis = require('../utils/redisClient');
+const { acquireLock, releaseLock } = require('../utils/bookingLock');
 
 const getActiveBookings = async (userId = null) => { // utility function
   const now = new Date();
@@ -48,23 +49,45 @@ router.post('/', verifyToken, async (req, res) => {
       return res.status(400).json({ msg: 'Invalid booking date. Must be between 2 hours and 14 days from now.' });
     }
 
-    const { isAvailable, conflicts } = await checkAvailability(resourceId, startDate, endDate);
-
-    if (!isAvailable) {
-      return res.status(409).json({ 
-        error: 'Resource is not available for the selected time slot',
-        conflicts
-      });
+    // Serialise check-then-insert per resource. The lock is per resource, not
+    // per slot, because bookings are free-form intervals: two overlapping
+    // requests with different start times must still contend.
+    // If Redis is down we fail closed (503) rather than book without the lock.
+    const lockKey = `lock:booking:${resourceId}`;
+    let lockToken;
+    try {
+      lockToken = await acquireLock(lockKey);
+    } catch (lockErr) {
+      console.error('Booking lock unavailable:', lockErr.message);
+      return res.status(503).json({ error: 'Booking service temporarily unavailable, please retry' });
     }
 
-    const newBooking = new Booking({
-      user: req.user.id,
-      resourceId,
-      start: startDate,
-      end: endDate
-    });
+    if (!lockToken) {
+      return res.status(409).json({ error: 'Another booking for this resource is in progress, please retry' });
+    }
 
-    const booking = await newBooking.save();
+    let booking;
+    try {
+      const { isAvailable, conflicts } = await checkAvailability(resourceId, startDate, endDate);
+
+      if (!isAvailable) {
+        return res.status(409).json({ 
+          error: 'Resource is not available for the selected time slot',
+          conflicts
+        });
+      }
+
+      const newBooking = new Booking({
+        user: req.user.id,
+        resourceId,
+        start: startDate,
+        end: endDate
+      });
+
+      booking = await newBooking.save();
+    } finally {
+      await releaseLock(lockKey, lockToken);
+    }
     console.log('Booking created:', booking);
     res.json(booking);
   } catch (err) {
