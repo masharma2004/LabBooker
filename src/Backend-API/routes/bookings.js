@@ -91,6 +91,10 @@ router.post('/', verifyToken, async (req, res) => {
     console.log('Booking created:', booking);
     res.json(booking);
   } catch (err) {
+    // Unique index hit: someone else got this slot first
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'Resource is not available for the selected time slot' });
+    }
     console.error('Server error in POST /api/bookings:', err);
     res.status(500).json({ error: err.message });
   }
