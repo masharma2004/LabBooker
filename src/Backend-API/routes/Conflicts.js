@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireAdmin } = require('../middleware/auth');
 const Conflict = require('../models/Conflict');
 const User = require('../models/User');
 const Booking = require('../models/Booking');
 
-// Apply verifyToken middleware to all admin routes
+// Apply verifyToken and requireAdmin middleware to all admin routes
 router.use(verifyToken);
+router.use(requireAdmin);
 
 const getActiveBookings = async (userId = null) => { // utility function
   const now = new Date();

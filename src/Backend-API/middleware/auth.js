@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
 const verifyToken= (req, res, next) => {
    const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -12,6 +13,21 @@ const verifyToken= (req, res, next) => {
     next();
   } catch (err) {
     res.status(401).json({ msg: 'Token is not valid' });
+  }
+};
+
+// Must run after verifyToken. Reads isAdmin from the DB rather than the token
+// so a demoted admin loses access immediately.
+const requireAdmin = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('isAdmin');
+    if (!user || !user.isAdmin) {
+      return res.status(403).json({ msg: 'Admin access required' });
+    }
+    next();
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
   }
 };
 
@@ -30,4 +46,4 @@ const generateToken = (user) => {
 };
 
 
-module.exports = { verifyToken, generateToken };
+module.exports = { verifyToken, requireAdmin, generateToken };
