@@ -97,7 +97,8 @@ router.post('/resolve-conflict/:conflictId', async (req, res) => {
 // GET /api/admin/pending-approvals
 router.get('/pending-approvals',verifyToken,async (req, res) => {
   try {
-    const pendingUsers = await User.find({ isConfirmed: true, isApproved: "pending" });
+    const pendingUsers = await User.find({ isConfirmed: true, isApproved: "pending" })
+      .select("-password -confirmationToken -resetPasswordToken -resetPasswordExpires");
     res.json(pendingUsers);
   } catch (err) {
     console.error(err.message);
