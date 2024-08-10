@@ -64,7 +64,7 @@ router.post('/',async (req, res) => {
       if (!user.isConfirmed) {
         await sendConfirmationEmail(user);
         return res.status(400).json({ msg: 'Your account is pending Confirmation. Please check your email for further instructions.' , isConfirmed: false });
-      } else if(!user.isApproved) {
+      } else if (user.isApproved !== 'approved') {
         return res.status(403).json({ msg: 'Your account has not been approved yet. Please wait for approval.', isApproved: false });
       } else {
         return res.status(400).json({ msg: 'User already exists' });
@@ -288,7 +288,7 @@ router.post('/login',async (req, res) => {
     return res.status(400).json({ msg: 'Your account is pending confirmation. Please check your email for further instructions.' });
   }
 
-  if (!user?.isApproved) {
+  if (user.isApproved !== 'approved') {
     return res.status(403).json({ msg: 'Your account has not been approved yet. Please wait for approval.' });
   }
 
