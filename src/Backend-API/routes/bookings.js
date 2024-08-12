@@ -241,7 +241,7 @@ router.get('/:lab/:date', async (req, res) => {
 // PUT /api/bookings/:id
 router.put('/:id', verifyToken, async (req, res) => {
   try {
-    const { resource, start,end } = req.body;
+    const { resourceId, start, end } = req.body;
     const booking = await Booking.findById(req.params.id);
 
     if (!booking) {
@@ -252,20 +252,31 @@ router.put('/:id', verifyToken, async (req, res) => {
       return res.status(401).json({ msg: 'Not authorized' });
     }
 
-    
-    const { isAvailable, conflicts } = await checkAvailability(resource, new Date(start), new Date(end), booking._id);
+    // Only these fields can be edited; user and status stay as they are
+    const newResourceId = resourceId || booking.resourceId;
+    const newStart = start ? new Date(start) : booking.start;
+    const newEnd = end ? new Date(end) : booking.end;
 
-    if (!isAvailable && !req.query.override) {
+    const { isAvailable, conflicts } = await checkAvailability(newResourceId, newStart, newEnd, booking._id);
+
+    // Only admins can skip the conflict check
+    const override = req.query.override && req.user.isAdmin;
+    if (!isAvailable && !override) {
       return res.status(409).json({ 
         msg: 'Resource is not available for the selected time slot',
         conflicts
       });
     }
-    Object.assign(booking, req.body);
+    booking.resourceId = newResourceId;
+    booking.start = newStart;
+    booking.end = newEnd;
 
     await booking.save();
     res.json(booking);
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ msg: 'Resource is not available for the selected time slot' });
+    }
     console.error(err.message);
     res.status(500).send('Server Error');
   }
